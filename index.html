@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>에코스톤 빨간약 계산기</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        select,
+        input {
+            margin: 10px 0;
+            padding: 5px;
+            width: 250px;
+        }
+
+        #result {
+            margin-top: 20px;
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .highlight {
+            font-weight: bold;
+            color: #2a8;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>에코스톤 옵션 계산기</h1>
+
+    <label>옵션 검색: </label><br>
+    <input type="text" id="optionSearch" oninput="searchOptions()">
+    <select id="optionSelect" onchange="selectOption()">
+        <option value="">옵션을 선택하세요</option>
+    </select>
+
+    <div id="levelInputContainer" style="display:none;">
+        <label id="levelLabel">원하는 레벨 입력: </label><br>
+        <input type="number" id="levelInput" min="1" onchange="calculate()">
+    </div>
+
+    <div id="costInputContainer" style="display:none;">
+        <label>비용 입력 (회당): </label><br>
+        <input type="number" id="costInput" min="0" onchange="calculate()"> 원
+    </div>
+
+    <h2 id="result"></h2>
+
+    <script src="eco_combined_with_level.js"></script>
+    <script src="eco_level.js"></script>
+    <script>
+        let selectedOption = null;
+
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function searchOptions() {
+            const searchText = document.getElementById('optionSearch').value.trim();
+            const select = document.getElementById('optionSelect');
+            select.innerHTML = '<option value="">옵션을 선택하세요</option>';
+            ecoCombinedWithLevel.options.forEach((opt, index) => {
+                if (opt.ability.includes(searchText)) {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${opt.ability} (${opt.group})`;
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        function selectOption() {
+            const select = document.getElementById('optionSelect');
+            const idx = select.value;
+            if (idx !== '') {
+                selectedOption = ecoCombinedWithLevel.options[idx];
+                document.getElementById('levelInputContainer').style.display = 'block';
+                document.getElementById('costInputContainer').style.display = 'block';
+
+                const levelLabel = document.getElementById('levelLabel');
+                levelLabel.innerHTML = `원하는 레벨 입력 (범위: ${selectedOption.level_range}):`;
+            }
+            calculate();
+        }
+
+        function calculate() {
+            if (!selectedOption) return;
+
+            const levelInput = document.getElementById('levelInput').value;
+            const costInput = document.getElementById('costInput').value;
+            if (!levelInput) return;
+
+            const setKey = selectedOption.level_set;
+            const levels = ecoLevel.level_probabilities_sets[setKey];
+
+            const desiredLevel = parseInt(levelInput);
+            let totalLevelProb = 0;
+            let levelListHtml = '<ul>';
+
+            levels.forEach(lvl => {
+                if (lvl.level >= desiredLevel) {
+                    totalLevelProb += lvl.probability;
+                }
+                levelListHtml += `<li>레벨 ${lvl.level}: ${lvl.probability.toFixed(4)}%</li>`;
+            });
+            levelListHtml += '</ul>';
+
+            const optionProb = selectedOption.probability / 100;
+            const levelProb = totalLevelProb / 100;
+            const finalProb = optionProb * levelProb;
+
+            function trialsNeeded(targetProb) {
+                return Math.ceil(Math.log(1 - targetProb) / Math.log(1 - finalProb));
+            }
+
+            const trial50 = trialsNeeded(0.5);
+            const trial80 = trialsNeeded(0.8);
+            const trial90 = trialsNeeded(0.9);
+
+            let costText = ``;
+            if (costInput) {
+                const cost = parseInt(costInput);
+                costText = `
+                    예상 비용 (50%): ${formatNumber(cost * trial50)} 원<br>
+                    예상 비용 (80%): ${formatNumber(cost * trial80)} 원<br>
+                    예상 비용 (90%): ${formatNumber(cost * trial90)} 원<br>
+                    <br>
+                `;
+            }
+
+            let resultText = `
+                <div class="highlight">선택한 옵션: ${selectedOption.ability}</div>
+                입력한 레벨: ${desiredLevel} 이상<br>
+                <br>
+                50% 기대 성공 시도 수: ${formatNumber(trial50)} 회<br>
+                80% 기대 성공 시도 수: ${formatNumber(trial80)} 회<br>
+                90% 기대 성공 시도 수: ${formatNumber(trial90)} 회<br>
+                <br>
+                ${costText}
+                옵션 등장 확률: ${(optionProb * 100).toFixed(4)}%<br>                
+                레벨 등장 누적 확률(선택 레벨 이상): ${(levelProb * 100).toFixed(4)}%<br>
+                최종 조합 확률: ${(finalProb * 100).toFixed(6)}%<br><br>
+                레벨별 확률:<br>
+                ${levelListHtml}
+
+
+            `;
+
+            document.getElementById('result').innerHTML = resultText;
+        }
+
+        searchOptions();
+    </script>
+</body>
+
+</html>
